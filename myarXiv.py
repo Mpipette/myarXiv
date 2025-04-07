@@ -155,7 +155,7 @@ class AdvancedSearch:
         if date_type == AdvancedSearch._SUBMITTED_DATE_FIRST:
             self._date_type = 'submitted_date_first'
         if date_type == AdvancedSearch._ANNOUNCED_DATE_FIRST:
-            self._date_type = 'announced_date_fist'
+            self._date_type = 'announced_date_first'
             
         
     def getUrls(self):
@@ -163,18 +163,40 @@ class AdvancedSearch:
         search_query = 'https://arxiv.org/search/advanced?advanced=&'
         
         # terms
-        for enum, term in enumerate(self._terms):
-            if len(term) == 3:
-                search_query += 'terms-'+ str(enum) + 'operator='+term['operator'] + '&'
-                search_query += 'terms-' + str(enum) + 'term=' + term['term'] + '&'
-                search_query += 'terms-' + str(enum) + 'field=' + term['field'] + '&'
-            else:
-                ic()
-                raise Exception
+        ic(self._terms)
+        ic(type(self._terms))
         
+        if isinstance(self._terms,str):
+            search_query += 'terms-'+ str(0) + '-operator=AND&'
+            search_query += 'terms-'+ str(0) + '-term=' + self._terms + '&'
+            search_query += 'terms-'+ str(0) + '-field=all&'
+        elif isinstance(self._terms,'list'):   
+            for enum, obj_term in enumerate(self._terms):
+                try:
+                    if isinstance(obj_term, str):
+                        search_query += 'terms-'+ str(enum) + '-operator=AND&'
+                        search_query += 'terms-'+ str(enum) + '-term=' + obj_term + '&'
+                        search_query += 'terms-'+ str(enum) + '-field=all&'
+                    elif isinstance(obj_term, dict):
+                        search_query += 'terms-'+ str(enum) + 'operator='+obj_term['operator'] + '&'
+                        search_query += 'terms-' + str(enum) + 'term=' + obj_term['term'] + '&'
+                        search_query += 'terms-' + str(enum) + 'field=' + obj_term['field'] + '&'
+                except Exception:
+                    raise Exception
+        else:
+            ic()
+            raise Exception 
+
         # subject
-        for subject in self._subjects:
-            search_query += subject +'=y&'
+        if self._subjects == 'all':
+            pass
+        elif isinstance(self._subjects, list):
+            for subject in self._subjects:
+                search_query += subject +'=y&'
+        else:
+            ic()
+            raise Exception
+                
         
         # physics_archive 
         search_query += 'classification-physics_archives=' + self._physics_archive + '&'
@@ -182,10 +204,10 @@ class AdvancedSearch:
         # cross_listed
         search_query += 'classification-include_cross_list=' + self._cross_listed + '&'
         
-        # date'filter
+        # date-filter
         search_query += 'date-filter_by=' + self._date_filter +'&'
         if self._date == ():
-            search_query += 'date-from_date=&date-to_date=&'
+            search_query += 'date-year=&date-from_date=&date-to_date=&'
         elif len(self._date):
             search_query += 'date-from_date='+ self._date[0]+'&date-to_date=' + self._date[1] + '&'
         
@@ -199,13 +221,17 @@ class AdvancedSearch:
         search_query += 'size=100&'
         
         # order
-        search_query += 'order=-announced_date_first&' 
+        search_query += 'order=-announced_date_first' 
         
         print(search_query)
         return search_query
             
-            
-            
+if __name__ == '__main__' :
+    ad = AdvancedSearch
+    
+    adinstance = ad('sound')
+    adinstance.getUrls()
+    
         
         
 
