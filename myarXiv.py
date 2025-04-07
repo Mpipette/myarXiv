@@ -1,5 +1,6 @@
 from typing import Final
 
+import time
 from bs4 import BeautifulSoup
 import lxml
 import requests
@@ -7,6 +8,11 @@ from urllib.parse import urlparse, urlunparse, parse_qs, parse_qsl
 
 from pprint import pprint
 from icecream import ic
+from tqdm import tqdm
+
+SIZE_SELECT = [
+    25, 50, 100, 200
+]
 
 SUBJECT_ELEMENT = [
     'classification-physics_archives',
@@ -82,19 +88,6 @@ SIMPLE_SEARCH_TYPE_SPECIAL = [
 ]
 
 
-
-
-class SimpleSearch:
-    
-    def __init__(self, query, type_):
-        self.search_query = query,
-        self.search_type = type_
-
-        pass
-    
-    pass
-
-
 class AdvancedSearch:
         
     _SUBMITTED_DATE = 0
@@ -105,7 +98,7 @@ class AdvancedSearch:
                  terms, subjects = 'all',
                  physics_archive = 'all',
                  has_cross_listed = True,
-                 hits = 50, from_index = 0, order = _ANNOUNCED_DATE_FIRST,
+                 size = 50, from_index = 0, order = _ANNOUNCED_DATE_FIRST,
                  date=(), date_type=_ANNOUNCED_DATE_FIRST,
                  ):
         """_summary_
@@ -141,7 +134,10 @@ class AdvancedSearch:
             self._cross_listed = 'include'
         else:
             self._cross_listed = 'exclude'
-        self._hits = max(hits, 200)
+        if size in SIZE_SELECT:
+            self._size = min(size, 200)
+        else:
+            raise Exception('size: sizeは25,50,100,200のうちいずれかを選択してください')
         self._from_index = from_index
         if date == (): 
             self._date_filter = 'all_dates'
@@ -155,22 +151,18 @@ class AdvancedSearch:
         if date_type == AdvancedSearch._SUBMITTED_DATE_FIRST:
             self._date_type = 'submitted_date_first'
         if date_type == AdvancedSearch._ANNOUNCED_DATE_FIRST:
-            self._date_type = 'announced_date_first'
-            
+            self._date_type = 'announced_date_first'            
         
-    def getUrls(self):
+    def getSetsParentUrls(self,from_index = None, size=None):
         
         search_query = 'https://arxiv.org/search/advanced?advanced=&'
         
         # terms
-        ic(self._terms)
-        ic(type(self._terms))
-        
         if isinstance(self._terms,str):
             search_query += 'terms-'+ str(0) + '-operator=AND&'
             search_query += 'terms-'+ str(0) + '-term=' + self._terms + '&'
             search_query += 'terms-'+ str(0) + '-field=all&'
-        elif isinstance(self._terms,'list'):   
+        elif isinstance(self._terms, list):   
             for enum, obj_term in enumerate(self._terms):
                 try:
                     if isinstance(obj_term, str):
@@ -182,7 +174,7 @@ class AdvancedSearch:
                         search_query += 'terms-' + str(enum) + 'term=' + obj_term['term'] + '&'
                         search_query += 'terms-' + str(enum) + 'field=' + obj_term['field'] + '&'
                 except Exception:
-                    raise Exception
+                    raise Exception               
         else:
             ic()
             raise Exception 
@@ -218,20 +210,63 @@ class AdvancedSearch:
         search_query += 'abstracts=hide&'
         
         # size
-        search_query += 'size=100&'
+        if size == None:
+            search_query += 'size=100&'
+        else:
+            search_query += 'size=' + str(size) + '&'
         
         # order
-        search_query += 'order=-announced_date_first' 
+        search_query += 'order=-announced_date_first&'
         
-        print(search_query)
+        # index start
+        if from_index == None:
+            search_query += 'start='+ str(self._from_index)
+        else:
+            search_query += 'start=' + str(from_index)
         return search_query
+    
+    def getPaperUrls(self, from_index = None, size = None, hits_paper=300):
+        parent_urls = []
+        results_urls = []
+        if hits_paper > 1000:
+            raise Exception('1000を超えるpaperは取得できません。1000以下にhits_paperを指定してください')
+        if from_index == None:
+            from_index = self._from_index
+            initia_index = self._from_index
+        else:
+            initia_index = from_index
+        if size == None:
+            size = self._size
+        else:
+            size = min(size, 200)
+            
+        for i in range(hits_paper // size + 1):
+            parent_urls.append(self.getSetsParentUrls(from_index=from_index,size=size))
+            from_index += size
+        print('arXiv paper ID を取得しています')
+        for url in tqdm(parent_urls):
+            try:
+                time.sleep(1)
+                url_response = requests.get(url=url)
+                url_response.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                ic()
+                raise e
+                
+            url_soup = BeautifulSoup(url_response.text, 'lxml')
+            url_content_soup = url_soup.find('div',attrs={'class':'content'})
+            paper_url_lst = url_content_soup.find_all(lambda tag: tag.name == 'a' and 'arXiv:' in tag.text)
+            for paper_url in paper_url_lst:
+                results_urls.append(paper_url.get('href'))
+        results_urls = results_urls[:hits_paper]
+        print('取得完了: 取得数:', len(results_urls),f'取得index : {initia_index + 1} ~ {initia_index + len(results_urls)}' )
+        return results_urls
             
 if __name__ == '__main__' :
-    ad = AdvancedSearch
     
-    adinstance = ad('sound')
-    adinstance.getUrls()
-    
+    adinstance = AdvancedSearch(['sound','separation'],from_index=2700)
+    adinstance.getSetsParentUrls()
+    adinstance.getPaperUrls(from_index=100,hits_paper=301,size=100)
         
         
 
